@@ -5,7 +5,7 @@
 $ErrorActionPreference = "Stop"
 
 # GitHub repository
-$GITHUB_REPO = "asahasrabuddhe/AI-Commit-Message-Generator"
+$GITHUB_REPO = "AllaySahoo222/AI-Commit-Message-Generator"
 $GITHUB_API = "https://api.github.com/repos/$GITHUB_REPO"
 
 Write-Host "AI Commit Message Generator - Installation Script" -ForegroundColor Cyan

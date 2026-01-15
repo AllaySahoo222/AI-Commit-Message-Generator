@@ -20,16 +20,27 @@ type Client interface {
 type OllamaClient struct {
 	apiKey  string
 	baseURL string
+	model   string
 	client  *http.Client
 }
 
-// NewClient creates a new Ollama AI client
-func NewClient(apiKey string) Client {
+// NewClient creates a new Ollama AI client from config
+func NewClient(apiKey, baseURL, model string, timeout time.Duration) Client {
+	if baseURL == "" {
+		baseURL = "http://localhost:11434/api/generate"
+	}
+	if model == "" {
+		model = "gpt-oss:120b"
+	}
+	if timeout == 0 {
+		timeout = 60 * time.Second
+	}
 	return &OllamaClient{
 		apiKey:  apiKey,
-		baseURL: "https://ollama.com/api/generate",
+		baseURL: baseURL,
+		model:   model,
 		client: &http.Client{
-			Timeout: 60 * time.Second, // Ollama might need more time for large models
+			Timeout: timeout,
 		},
 	}
 }
@@ -51,7 +62,7 @@ func (c *OllamaClient) GenerateCommitMessage(diff string, rules string) (string,
 	prompt := c.buildPrompt(diff, rules)
 
 	reqBody := ollamaRequest{
-		Model:  "gpt-oss:120b",
+		Model:  c.model,
 		Prompt: prompt,
 		Stream: false,
 	}

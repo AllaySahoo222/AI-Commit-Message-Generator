@@ -10,7 +10,7 @@ echo ==================================================
 echo.
 
 REM GitHub repository
-set "GITHUB_REPO=asahasrabuddhe/AI-Commit-Message-Generator"
+set "GITHUB_REPO=AllaySahoo222/AI-Commit-Message-Generator"
 set "GITHUB_API=https://api.github.com/repos/%GITHUB_REPO%"
 
 REM Detect architecture (default to amd64)

@@ -14,7 +14,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # GitHub repository
-GITHUB_REPO="asahasrabuddhe/AI-Commit-Message-Generator"
+GITHUB_REPO="AllaySahoo222/AI-Commit-Message-Generator"
 GITHUB_API="https://api.github.com/repos/${GITHUB_REPO}"
 
 echo "AI Commit Message Generator - Installation Script"
