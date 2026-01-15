@@ -9,9 +9,11 @@ import (
 // Manual Mocks
 
 type MockGit struct {
-	IsInsideRepoFunc     func() (bool, error)
-	HasStagedChangesFunc func() (bool, error)
-	GetStagedDiffFunc    func() (string, error)
+	IsInsideRepoFunc      func() (bool, error)
+	HasStagedChangesFunc  func() (bool, error)
+	GetStagedDiffFunc     func() (string, error)
+	CommitWithMessageFunc func(message string) error
+	GetRepoRootFunc       func() (string, error)
 }
 
 func (m *MockGit) IsInsideRepo() (bool, error) {
@@ -24,6 +26,20 @@ func (m *MockGit) HasStagedChanges() (bool, error) {
 
 func (m *MockGit) GetStagedDiff() (string, error) {
 	return m.GetStagedDiffFunc()
+}
+
+func (m *MockGit) CommitWithMessage(message string) error {
+	if m.CommitWithMessageFunc != nil {
+		return m.CommitWithMessageFunc(message)
+	}
+	return nil
+}
+
+func (m *MockGit) GetRepoRoot() (string, error) {
+	if m.GetRepoRootFunc != nil {
+		return m.GetRepoRootFunc()
+	}
+	return "/tmp/test-repo", nil
 }
 
 type MockConfig struct {
@@ -146,7 +162,7 @@ func TestApp_Run(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			app := NewApp(tt.mockGit, tt.mockConfig, tt.mockAI)
+			app := NewApp(tt.mockGit, tt.mockConfig, nil, tt.mockAI)
 			err := app.Run()
 
 			if tt.expectedError != "" {
