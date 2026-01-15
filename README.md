@@ -162,7 +162,28 @@ Move `generate-commit.exe` to a directory in your PATH (e.g., `C:\Windows\System
 
 ## Installation
 
-### Using Installation Scripts (Recommended)
+### Quick Install (One-Liner)
+
+Install directly from GitHub with a single command:
+
+#### Mac/Linux
+```bash
+curl -fsSL https://raw.githubusercontent.com/AllaySahoo222/AI-Commit-Message-Generator/main/install.sh | bash
+```
+
+#### Windows (PowerShell)
+```powershell
+iwr -useb https://raw.githubusercontent.com/AllaySahoo222/AI-Commit-Message-Generator/main/install.ps1 | iex
+```
+
+#### Windows (Command Prompt)
+```cmd
+powershell -Command "iwr -useb https://raw.githubusercontent.com/AllaySahoo222/AI-Commit-Message-Generator/main/install.ps1 | iex"
+```
+
+### Using Installation Scripts (Manual Download)
+
+If you prefer to download the scripts first:
 
 #### Mac/Linux
 ```bash
@@ -181,6 +202,7 @@ install.bat
 
 The installation scripts will:
 - Detect your platform and architecture
+- Download the latest release from GitHub
 - Install the binary to a directory in your PATH
 - Set up the tool for easy access
 
