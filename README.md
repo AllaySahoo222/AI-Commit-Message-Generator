@@ -9,7 +9,7 @@ Writing good commit messages is essential for maintaining a clean history and fa
 - **Automation**: Automate the process of reading git diffs and crafting commit messages.
 - **Consistency**: Enforce team conventions via custom rules.
 - **Intelligence**: Use advanced AI to analyze the *intent* of changes, suggesting splits for complex diffs.
-- **Speed**: Built with the Go Standard Library for zero-dependency overhead and fast execution.
+- **Speed**: Built with the Go Standard Library and go-git library for zero external binary dependencies and fast execution.
 
 ## Features
 - **Smart Diff Analysis**: Reads staged changes and context.
@@ -18,6 +18,7 @@ Writing good commit messages is essential for maintaining a clean history and fa
 - **Conventional Commits**: Generates messages in the `<type>(<scope>): <description>` format.
 - **Easy Installation**: Platform-specific installation scripts for Windows, Mac, and Linux.
 - **Pre-commit Hook Integration**: Automatically generate commit messages when you run `git commit`.
+- **No External Dependencies**: Uses the go-git library - no git binary installation required.
 - **Hexagonal Architecture**: Clean, testable, and maintainable codebase.
 
 ## Directory Structure
@@ -38,7 +39,7 @@ The project follows a Hexagonal (Ports and Adapters) Architecture:
 │   │   ├── git_commit_rules.go             # Rules Loader (.git-commit-rules-for-ai)
 │   │   └── git_commit_rules_test.go        # Rules tests
 │   ├── git/
-│   │   ├── client.go           # Git Command Wrapper
+│   │   ├── client.go           # Git Operations (using go-git library)
 │   │   └── client_test.go      # Integration/Unit tests
 │   └── app/
 │       ├── app.go              # Core Application Logic / Orchestrator (init command)
@@ -54,72 +55,52 @@ The project follows a Hexagonal (Ports and Adapters) Architecture:
 
 ### Download Pre-built Executable
 
-**No Go installation required!** Download the pre-built binary for your platform:
+**No Go installation required!** Download the pre-built binary for your platform from the [latest GitHub Release](https://github.com/YOUR_USERNAME/YOUR_REPO/releases/latest).
 
-| Platform | Download | Size |
-|----------|----------|------|
-| 🪟 **Windows (64-bit)** | [`generate-commit.exe`](./generate-commit.exe) | 8.4 MB |
-| 🍎 **Mac (Apple Silicon)** | [`generate-commit-mac-arm64`](./generate-commit-mac-arm64) | 8.0 MB |
-| 🍎 **Mac (Intel)** | [`generate-commit-mac-intel`](./generate-commit-mac-intel) | 8.4 MB |
-| 🐧 **Linux (64-bit)** | [`generate-commit-linux`](./generate-commit-linux) | 8.3 MB |
+| Platform | Archive | Binary Name |
+|----------|---------|-------------|
+| 🪟 **Windows (64-bit)** | `generate-commit-windows.zip` | `generate-commit.exe` |
+| 🪟 **Windows (ARM64)** | `generate-commit-windows-arm64.zip` | `generate-commit.exe` |
+| 🍎 **Mac (Apple Silicon)** | `generate-commit-mac-arm64.tar.gz` | `generate-commit` |
+| 🍎 **Mac (Intel)** | `generate-commit-mac-intel.tar.gz` | `generate-commit` |
+| 🐧 **Linux (64-bit)** | `generate-commit-linux.tar.gz` | `generate-commit` |
+| 🐧 **Linux (ARM64)** | `generate-commit-linux-arm64.tar.gz` | `generate-commit` |
 
 ### Setup Instructions
 
-#### Windows
-1. Download `generate-commit.exe`
-2. Open Command Prompt or PowerShell
-3. Set your API key:
-   ```cmd
+1. **Download the release**: Go to the [latest release page](https://github.com/YOUR_USERNAME/YOUR_REPO/releases/latest) and download the archive for your platform.
+
+2. **Extract the archive**:
+   - **Windows**: Extract the `.zip` file
+   - **Mac/Linux**: Extract the `.tar.gz` file:
+     ```bash
+     tar -xzf generate-commit-*.tar.gz
+     ```
+
+3. **Make it executable** (Mac/Linux only):
+   ```bash
+   chmod +x generate-commit
+   ```
+
+4. **Set your API key**:
+   ```bash
+   # Mac/Linux
+   export OLLAMA_API_KEY="your_api_key_here"
+   
+   # Windows (Command Prompt)
    set OLLAMA_API_KEY=your_api_key_here
+   
+   # Windows (PowerShell)
+   $env:OLLAMA_API_KEY="your_api_key_here"
    ```
-4. Run the tool:
-   ```cmd
+
+5. **Run the tool**:
+   ```bash
+   # Mac/Linux
+   ./generate-commit
+   
+   # Windows
    generate-commit.exe
-   ```
-
-#### Mac (Apple Silicon - M1/M2/M3)
-1. Download `generate-commit-mac-arm64`
-2. Make it executable:
-   ```bash
-   chmod +x generate-commit-mac-arm64
-   ```
-3. Set your API key:
-   ```bash
-   export OLLAMA_API_KEY="your_api_key_here"
-   ```
-4. Run the tool:
-   ```bash
-   ./generate-commit-mac-arm64
-   ```
-
-#### Mac (Intel)
-1. Download `generate-commit-mac-intel`
-2. Make it executable:
-   ```bash
-   chmod +x generate-commit-mac-intel
-   ```
-3. Set your API key:
-   ```bash
-   export OLLAMA_API_KEY="your_api_key_here"
-   ```
-4. Run the tool:
-   ```bash
-   ./generate-commit-mac-intel
-   ```
-
-#### Linux
-1. Download `generate-commit-linux`
-2. Make it executable:
-   ```bash
-   chmod +x generate-commit-linux
-   ```
-3. Set your API key:
-   ```bash
-   export OLLAMA_API_KEY="your_api_key_here"
-   ```
-4. Run the tool:
-   ```bash
-   ./generate-commit-linux
    ```
 
 ### Optional: Add to PATH
@@ -128,7 +109,7 @@ For easier access, move the binary to your PATH:
 
 **Mac/Linux:**
 ```bash
-sudo mv generate-commit-* /usr/local/bin/generate-commit
+sudo mv generate-commit /usr/local/bin/
 ```
 
 **Windows:**
@@ -141,6 +122,8 @@ Move `generate-commit.exe` to a directory in your PATH (e.g., `C:\Windows\System
 ### Prerequisites
 - **Go 1.21+** installed
 - **Ollama API Key**: Get one from [Ollama](https://ollama.com)
+
+**Note**: The tool uses the `go-git` library and does not require the `git` binary to be installed on your system.
 
 ### Installation Steps
 

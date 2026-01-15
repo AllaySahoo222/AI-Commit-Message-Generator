@@ -1,0 +1,87 @@
+# GoReleaser configuration for AI Commit Message Generator
+project_name: generate-commit
+
+# Build configuration
+builds:
+  - id: generate-commit
+    main: ./cmd/generate-commit
+    binary: generate-commit
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+
+# Archive configuration
+archives:
+  - id: default
+    builds:
+      - generate-commit
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: >-
+      {{ .ProjectName }}-
+      {{- if eq .Os "darwin" }}mac-{{ if eq .Arch "amd64" }}intel{{ else if eq .Arch "arm64" }}arm64{{ end }}
+      {{- else if eq .Os "windows" }}windows{{ if eq .Arch "arm64" }}-arm64{{ end }}
+      {{- else }}{{ .Os }}{{ if eq .Arch "arm64" }}-arm64{{ end }}{{ end }}
+    files:
+      - README.md
+      - LICENSE*
+
+# Release configuration
+release:
+  mode: replace
+  header: |
+    ## {{ .TagName }}
+    
+    {{ .ReleaseNotes }}
+  footer: |
+    ## Installation
+    
+    Download the appropriate binary for your platform from the assets below.
+    
+    ### Quick Start
+    
+    1. Download the binary for your platform
+    2. Make it executable (Mac/Linux): `chmod +x generate-commit-*`
+    3. Set your API key: `export OLLAMA_API_KEY=your_api_key`
+    4. Run: `./generate-commit-*` (or `generate-commit.exe` on Windows)
+
+# Package managers (optional - can be removed if not needed)
+# nfpms:
+#   - id: default
+#     builds:
+#       - generate-commit
+#     formats:
+#       - deb
+#       - rpm
+
+# Snap configuration (optional)
+# snaps:
+#   - name: generate-commit
+#     builds:
+#       - generate-commit
+#     publish: false
+
+# Checksums
+checksum:
+  name_template: 'checksums.txt'
+
+# Changelog
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - Merge pull request
+      - Merge branch

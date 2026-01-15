@@ -2,8 +2,10 @@ package git
 
 import (
 	"os"
-	"os/exec"
+	"strings"
 	"testing"
+
+	git "github.com/go-git/go-git/v5"
 )
 
 func TestClientImpl_Integration(t *testing.T) {
@@ -33,13 +35,20 @@ func TestClientImpl_Integration(t *testing.T) {
 		t.Error("expected IsInsideRepo to be false")
 	}
 
-	// Initialize Git Repo
-	if output, err := exec.Command("git", "init").CombinedOutput(); err != nil {
-		t.Fatalf("failed to git init: %v\nOutput: %s", err, output)
+	// Initialize Git Repo using go-git
+	repo, err := git.PlainInit(tempDir, false)
+	if err != nil {
+		t.Fatalf("failed to git init: %v", err)
 	}
+
 	// Configure git user/email for commits (required in some envs)
-	exec.Command("git", "config", "user.email", "test@example.com").Run()
-	exec.Command("git", "config", "user.name", "Test User").Run()
+	config, err := repo.Config()
+	if err != nil {
+		t.Fatalf("failed to get config: %v", err)
+	}
+	config.User.Name = "Test User"
+	config.User.Email = "test@example.com"
+	repo.SetConfig(config)
 
 	// 2. Test IsInsideRepo - True
 	inRepo, err = client.IsInsideRepo()
@@ -73,9 +82,13 @@ func TestClientImpl_Integration(t *testing.T) {
 		t.Error("expected no staged changes for unstaged file")
 	}
 
-	// Stage the file
-	if output, err := exec.Command("git", "add", "test.txt").CombinedOutput(); err != nil {
-		t.Fatalf("failed to git add: %v\nOutput: %s", err, output)
+	// Stage the file using go-git
+	worktree, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("failed to get worktree: %v", err)
+	}
+	if _, err := worktree.Add("test.txt"); err != nil {
+		t.Fatalf("failed to git add: %v", err)
 	}
 
 	// 5. Test HasStagedChanges - True
@@ -98,4 +111,7 @@ func TestClientImpl_Integration(t *testing.T) {
 	// Verify diff contains filename or content
 	// git diff output formats vary, but should contain "test.txt"
 	// diff --staged on a new file shows mostly +lines
+	if !strings.Contains(diff, "test.txt") {
+		t.Errorf("expected diff to contain 'test.txt', got: %s", diff)
+	}
 }

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 // Loader defines the interface for loading configuration
@@ -11,7 +12,11 @@ type Loader interface {
 }
 
 // FileLoader implements the Loader interface
-type FileLoader struct{}
+type FileLoader struct {
+	cachedRepoRoot string
+	cachedRules    string
+	mu             sync.Mutex
+}
 
 // NewLoader creates a new Config loader
 func NewLoader() Loader {
@@ -27,32 +32,42 @@ func NewLoader() Loader {
 // We can also double check by finding the .git dir if needed, but 'internal/git' handles repo check.
 // We'll trust the user invokes it from within the repo.
 func (c *FileLoader) LoadRules() (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	// 1. Try to find the root of the git repo.
-	// We can cheat a bit and just look in current dir and maybe parent dirs?
-	// But strictly, we should invoke git to find root, OR just look in CWD.
-	// "Look for a file ... in the root of the git repository"
-	// Let's assume the tool is run from the root for now, or we can try to walk up until we find .git
-	
 	repoRoot, err := findRepoRoot()
 	if err != nil {
 		// If we can't find repo root, we can't find the rules file there.
 		// Return empty, but maybe this isn't an error for the rules loader itself?
 		// The App will verify we are in a repo first.
 		// If we are, findRepoRoot should succeed.
-		return "", nil 
+		return "", nil
+	}
+
+	// Return cached rules if repo root hasn't changed
+	if c.cachedRepoRoot == repoRoot && c.cachedRules != "" {
+		return c.cachedRules, nil
 	}
 
 	rulesPath := filepath.Join(repoRoot, ".git-commit-rules-for-ai")
-	
+
 	content, err := os.ReadFile(rulesPath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			// Cache empty result
+			c.cachedRepoRoot = repoRoot
+			c.cachedRules = ""
 			return "", nil // Optional file
 		}
 		return "", err
 	}
 
-	return string(content), nil
+	// Cache the result
+	c.cachedRepoRoot = repoRoot
+	c.cachedRules = string(content)
+
+	return c.cachedRules, nil
 }
 
 func findRepoRoot() (string, error) {
