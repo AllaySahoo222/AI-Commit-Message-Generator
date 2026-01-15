@@ -74,21 +74,6 @@ PASS
 ok  	ai-commit-message-generator/internal/config	7.474s
 ```
 
-## Performance Improvements Summary
-
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| **IsInsideRepo** | 36,601 ns/op | 15,081 ns/op | **58.8% faster** |
-| **IsInsideRepo Memory** | 4,320 B/op | 562 B/op | **87.0% less** |
-| **IsInsideRepo Allocs** | 49 allocs/op | 5 allocs/op | **89.8% fewer** |
-| **GetStagedDiff_VeryLarge** | 9,076,166 ns/op | 6,276,543 ns/op | **30.8% faster** |
-| **GetStagedDiff_VeryLarge Allocs** | 106,640 allocs/op | 5,782 allocs/op | **94.6% fewer** |
-| **GetStagedDiff_Large** | 2,617,496 ns/op | 1,863,577 ns/op | **28.8% faster** |
-| **GetStagedDiff_Large Allocs** | 23,075 allocs/op | 2,663 allocs/op | **88.5% fewer** |
-| **LoadRules_WithFile** | 32,447 ns/op | 16,762 ns/op | **48.3% faster** |
-| **LoadRules_WithFile Memory** | 2,282 B/op | 1,026 B/op | **55.0% less** |
-| **LoadRules_WithFile Allocs** | 15 allocs/op | 8 allocs/op | **46.7% fewer** |
-
 ## Test Environment
 
 - **OS**: darwin (macOS)
