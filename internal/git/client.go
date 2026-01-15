@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/go-git/go-billy/v5/osfs"
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -299,19 +301,86 @@ func (c *ClientImpl) GetStagedDiff() (string, error) {
 
 // CommitWithMessage executes git commit with the given message
 func (c *ClientImpl) CommitWithMessage(message string) error {
-	cmd := exec.Command("git", "commit", "-m", message)
-	if err := cmd.Run(); err != nil {
+	repo, err := c.openRepo()
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	// Get git config for author information
+	config, err := repo.Config()
+	if err != nil {
+		return fmt.Errorf("failed to get git config: %w", err)
+	}
+
+	// Validate that git user name and email are configured
+	if config.User.Name == "" {
+		return fmt.Errorf("git user name is not configured. Please set it with: git config user.name \"Your Name\"")
+	}
+	if config.User.Email == "" {
+		return fmt.Errorf("git user email is not configured. Please set it with: git config user.email \"your.email@example.com\"")
+	}
+
+	// Create author signature from config
+	author := &object.Signature{
+		Name:  config.User.Name,
+		Email: config.User.Email,
+		When:  time.Now(),
+	}
+
+	// Commit the staged changes
+	_, err = worktree.Commit(message, &git.CommitOptions{
+		Author: author,
+	})
+	if err != nil {
 		return fmt.Errorf("failed to commit: %w", err)
 	}
+
 	return nil
 }
 
 // GetRepoRoot returns the root directory of the git repository
 func (c *ClientImpl) GetRepoRoot() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
-	out, err := cmd.Output()
+	repo, err := c.openRepo()
 	if err != nil {
-		return "", fmt.Errorf("failed to get repo root: %w", err)
+		return "", fmt.Errorf("failed to open repository: %w", err)
 	}
-	return strings.TrimSpace(string(out)), nil
+
+	worktree, err := repo.Worktree()
+	if err != nil {
+		return "", fmt.Errorf("failed to get worktree: %w", err)
+	}
+
+	// Try to get root from OS filesystem if it's a BoundOS type
+	if boundOS, ok := worktree.Filesystem.(*osfs.BoundOS); ok {
+		return boundOS.Root(), nil
+	}
+
+	// Fallback: traverse up from current directory to find .git directory
+	// This works regardless of filesystem type
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	// Traverse up to find .git directory
+	dir := wd
+	for {
+		gitPath := filepath.Join(dir, ".git")
+		if _, err := os.Stat(gitPath); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached filesystem root
+			break
+		}
+		dir = parent
+	}
+
+	return "", fmt.Errorf("failed to determine repository root: .git directory not found")
 }
