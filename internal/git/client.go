@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -19,7 +20,11 @@ type Client interface {
 }
 
 // ClientImpl implements the Client interface using go-git
-type ClientImpl struct{}
+type ClientImpl struct {
+	repo     *git.Repository
+	repoPath string
+	mu       sync.Mutex
+}
 
 // NewClient creates a new Git client
 func NewClient() Client {
@@ -27,10 +32,19 @@ func NewClient() Client {
 }
 
 // openRepo opens a git repository from the current working directory
+// Uses caching to avoid repeated opens
 func (c *ClientImpl) openRepo() (*git.Repository, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	// Return cached repo if it exists and we're in the same directory
+	if c.repo != nil && c.repoPath == wd {
+		return c.repo, nil
 	}
 
 	repo, err := git.PlainOpenWithOptions(wd, &git.PlainOpenOptions{
@@ -39,6 +53,10 @@ func (c *ClientImpl) openRepo() (*git.Repository, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Cache the repo
+	c.repo = repo
+	c.repoPath = wd
 
 	return repo, nil
 }
@@ -73,6 +91,7 @@ func (c *ClientImpl) HasStagedChanges() (bool, error) {
 	}
 
 	// Check if there are any staged changes
+	// Short-circuit: return immediately after finding first staged file
 	for _, fileStatus := range status {
 		// Staged changes are files that have been added to the index
 		// but not yet committed. This includes:
@@ -106,7 +125,14 @@ func (c *ClientImpl) GetStagedDiff() (string, error) {
 		return "", fmt.Errorf("failed to get status: %w", err)
 	}
 
+	// Pre-allocate builder capacity based on estimated diff size
+	// Estimate: ~100 bytes per file header + ~50 bytes per line
+	estimatedSize := len(status) * 500
 	var diffBuilder strings.Builder
+	diffBuilder.Grow(estimatedSize)
+
+	// Cache working directory
+	wd, _ := os.Getwd()
 
 	// Get HEAD commit for comparison
 	head, err := repo.Head()
@@ -135,30 +161,39 @@ func (c *ClientImpl) GetStagedDiff() (string, error) {
 		switch fileStatus.Staging {
 		case git.Added:
 			// New file - show all lines as additions
-			diffBuilder.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", filePath, filePath))
-			diffBuilder.WriteString(fmt.Sprintf("new file mode 100644\n"))
-			diffBuilder.WriteString(fmt.Sprintf("index 0000000..%s\n", fileStatus.Extra))
-			diffBuilder.WriteString(fmt.Sprintf("--- /dev/null\n"))
-			diffBuilder.WriteString(fmt.Sprintf("+++ b/%s\n", filePath))
+			diffBuilder.WriteString("diff --git a/")
+			diffBuilder.WriteString(filePath)
+			diffBuilder.WriteString(" b/")
+			diffBuilder.WriteString(filePath)
+			diffBuilder.WriteString("\nnew file mode 100644\nindex 0000000..")
+			diffBuilder.WriteString(fileStatus.Extra)
+			diffBuilder.WriteString("\n--- /dev/null\n+++ b/")
+			diffBuilder.WriteString(filePath)
+			diffBuilder.WriteString("\n")
 
 			// Read file content
-			wd, _ := os.Getwd()
 			fullPath := filepath.Join(wd, filePath)
 			content, err := os.ReadFile(fullPath)
 			if err == nil {
 				lines := strings.Split(string(content), "\n")
 				for _, line := range lines {
-					diffBuilder.WriteString(fmt.Sprintf("+%s\n", line))
+					diffBuilder.WriteString("+")
+					diffBuilder.WriteString(line)
+					diffBuilder.WriteString("\n")
 				}
 			}
 
 		case git.Deleted:
 			// Deleted file
-			diffBuilder.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", filePath, filePath))
-			diffBuilder.WriteString(fmt.Sprintf("deleted file mode 100644\n"))
-			diffBuilder.WriteString(fmt.Sprintf("index %s..0000000\n", fileStatus.Extra))
-			diffBuilder.WriteString(fmt.Sprintf("--- a/%s\n", filePath))
-			diffBuilder.WriteString(fmt.Sprintf("+++ /dev/null\n"))
+			diffBuilder.WriteString("diff --git a/")
+			diffBuilder.WriteString(filePath)
+			diffBuilder.WriteString(" b/")
+			diffBuilder.WriteString(filePath)
+			diffBuilder.WriteString("\ndeleted file mode 100644\nindex ")
+			diffBuilder.WriteString(fileStatus.Extra)
+			diffBuilder.WriteString("..0000000\n--- a/")
+			diffBuilder.WriteString(filePath)
+			diffBuilder.WriteString("\n+++ /dev/null\n")
 
 			// Try to get content from HEAD
 			if headTree != nil {
@@ -173,7 +208,9 @@ func (c *ClientImpl) GetStagedDiff() (string, error) {
 							reader.Close()
 							lines := strings.Split(string(content), "\n")
 							for _, line := range lines {
-								diffBuilder.WriteString(fmt.Sprintf("-%s\n", line))
+								diffBuilder.WriteString("-")
+								diffBuilder.WriteString(line)
+								diffBuilder.WriteString("\n")
 							}
 						}
 					}
@@ -182,10 +219,19 @@ func (c *ClientImpl) GetStagedDiff() (string, error) {
 
 		case git.Modified:
 			// Modified file - get diff between HEAD and staged version
-			diffBuilder.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", filePath, filePath))
-			diffBuilder.WriteString(fmt.Sprintf("index %s..%s 100644\n", fileStatus.Extra, fileStatus.Extra))
-			diffBuilder.WriteString(fmt.Sprintf("--- a/%s\n", filePath))
-			diffBuilder.WriteString(fmt.Sprintf("+++ b/%s\n", filePath))
+			diffBuilder.WriteString("diff --git a/")
+			diffBuilder.WriteString(filePath)
+			diffBuilder.WriteString(" b/")
+			diffBuilder.WriteString(filePath)
+			diffBuilder.WriteString("\nindex ")
+			diffBuilder.WriteString(fileStatus.Extra)
+			diffBuilder.WriteString("..")
+			diffBuilder.WriteString(fileStatus.Extra)
+			diffBuilder.WriteString(" 100644\n--- a/")
+			diffBuilder.WriteString(filePath)
+			diffBuilder.WriteString("\n+++ b/")
+			diffBuilder.WriteString(filePath)
+			diffBuilder.WriteString("\n")
 
 			// Get old content from HEAD
 			var oldContent []byte
@@ -205,7 +251,6 @@ func (c *ClientImpl) GetStagedDiff() (string, error) {
 			}
 
 			// Get new content from working directory
-			wd, _ := os.Getwd()
 			fullPath := filepath.Join(wd, filePath)
 			newContent, err := os.ReadFile(fullPath)
 			if err != nil {
@@ -219,17 +264,27 @@ func (c *ClientImpl) GetStagedDiff() (string, error) {
 			// For simplicity, show old lines as removed and new lines as added
 			// A more sophisticated diff algorithm could be used here
 			for _, line := range oldLines {
-				diffBuilder.WriteString(fmt.Sprintf("-%s\n", line))
+				diffBuilder.WriteString("-")
+				diffBuilder.WriteString(line)
+				diffBuilder.WriteString("\n")
 			}
 			for _, line := range newLines {
-				diffBuilder.WriteString(fmt.Sprintf("+%s\n", line))
+				diffBuilder.WriteString("+")
+				diffBuilder.WriteString(line)
+				diffBuilder.WriteString("\n")
 			}
 
 		case git.Renamed:
 			// Renamed file
-			diffBuilder.WriteString(fmt.Sprintf("diff --git a/%s b/%s\n", fileStatus.Extra, filePath))
-			diffBuilder.WriteString(fmt.Sprintf("rename from %s\n", fileStatus.Extra))
-			diffBuilder.WriteString(fmt.Sprintf("rename to %s\n", filePath))
+			diffBuilder.WriteString("diff --git a/")
+			diffBuilder.WriteString(fileStatus.Extra)
+			diffBuilder.WriteString(" b/")
+			diffBuilder.WriteString(filePath)
+			diffBuilder.WriteString("\nrename from ")
+			diffBuilder.WriteString(fileStatus.Extra)
+			diffBuilder.WriteString("\nrename to ")
+			diffBuilder.WriteString(filePath)
+			diffBuilder.WriteString("\n")
 		}
 	}
 
