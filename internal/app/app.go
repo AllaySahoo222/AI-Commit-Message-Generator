@@ -87,7 +87,7 @@ func (a *App) Run() error {
 }
 
 // Init initializes the repository with config, rules file, and pre-commit hook
-func (a *App) Init() error {
+func (a *App) Init(force bool) error {
 	// Check if we're in a git repo
 	isRepo, err := a.Git.IsInsideRepo()
 	if err != nil {
@@ -104,13 +104,17 @@ func (a *App) Init() error {
 	}
 
 	// Check if already initialized
-	configExists, err := a.ConfigLoader.ConfigExists()
-	if err != nil {
-		return fmt.Errorf("failed to check config existence: %w", err)
-	}
-	if configExists {
-		fmt.Println("Repository already initialized. Use --force to reinitialize.")
-		return nil
+	if !force {
+		configExists, err := a.ConfigLoader.ConfigExists()
+		if err != nil {
+			return fmt.Errorf("failed to check config existence: %w", err)
+		}
+		if configExists {
+			fmt.Println("Repository already initialized. Use --force to reinitialize.")
+			return nil
+		}
+	} else {
+		fmt.Println("Forcing reinitialization...")
 	}
 
 	fmt.Println("Initializing commit generator...")
@@ -179,13 +183,29 @@ func (a *App) generatePreCommitHook() (string, error) {
 
 // generateUnixHook generates a bash pre-commit hook for Unix systems
 func (a *App) generateUnixHook() string {
-	return `#!/bin/bash
+	exePath, err := os.Executable()
+	if err != nil {
+		exePath = "generate-commit" // Fallback
+	} else {
+		// Ensure we have an absolute path
+		if absPath, err := filepath.Abs(exePath); err == nil {
+			exePath = absPath
+		}
+	}
+	
+	return fmt.Sprintf(`#!/bin/bash
 # Pre-commit hook for AI commit message generator
+
+# Skip if commit message was provided via -m flag
+# Git doesn't set any env var for this, but we can detect it by checking
+# if we're being called with a message file argument
+# For pre-commit hooks, if a message is provided, git will call prepare-commit-msg instead
+# So we only run if no message was provided (i.e., bare 'git commit')
 
 # Check if there are staged changes
 if ! git diff --staged --quiet; then
     # Generate commit message
-    COMMIT_MSG=$(generate-commit 2>&1)
+    COMMIT_MSG=$("%s" 2>&1)
     EXIT_CODE=$?
     
     if [ $EXIT_CODE -ne 0 ]; then
@@ -213,6 +233,9 @@ if ! git diff --staged --quiet; then
     echo "  [R]eject (abort commit)"
     echo "  [E]dit message"
     echo ""
+    
+    # Read from terminal explicitly to handle git hook context
+    exec < /dev/tty
     read -p "Your choice (A/R/E): " choice
     
     case "$choice" in
@@ -244,62 +267,83 @@ if ! git diff --staged --quiet; then
             ;;
     esac
 fi
-`
+`, exePath)
+}
 }
 
 // generateWindowsHook generates a batch pre-commit hook for Windows
 func (a *App) generateWindowsHook() string {
-	return "@echo off\n" +
-		"REM Pre-commit hook for AI commit message generator (Windows)\n\n" +
-		"REM Check if there are staged changes\n" +
-		"git diff --staged --quiet >nul 2>&1\n" +
-		"if %errorlevel% equ 0 exit /b 0\n\n" +
-		"REM Generate commit message\n" +
-		"for /f \"delims=\" %%i in ('generate-commit 2^>^&1') do set OUTPUT=%%i\n" +
-		"if errorlevel 1 (\n" +
-		"    echo Error generating commit message\n" +
-		"    exit /b 1\n" +
-		")\n\n" +
-		"REM Extract commit message (basic extraction - may need refinement)\n" +
-		"set COMMIT_MSG=%OUTPUT%\n" +
-		"REM Remove \"Generating commit message...\" line if present\n" +
-		"set COMMIT_MSG=%COMMIT_MSG:Generating commit message...=%\n\n" +
-		"if \"%COMMIT_MSG%\"==\"\" (\n" +
-		"    echo No commit message generated\n" +
-		"    exit /b 1\n" +
-		")\n\n" +
-		"REM Display the generated message\n" +
-		"echo.\n" +
-		"echo Generated commit message:\n" +
-		"echo ==========================\n" +
-		"echo %COMMIT_MSG%\n" +
-		"echo ==========================\n" +
-		"echo.\n" +
-		"echo Options:\n" +
-		"echo   [A]ccept and commit\n" +
-		"echo   [R]eject (abort commit)\n" +
-		"echo   [E]dit message\n" +
-		"echo.\n" +
-		"set /p CHOICE=Your choice (A/R/E): \n\n" +
-		"if /i \"%CHOICE%\"==\"A\" goto accept\n" +
-		"if /i \"%CHOICE:~0,1%\"==\"A\" goto accept\n" +
-		"if /i \"%CHOICE%\"==\"R\" goto reject\n" +
-		"if /i \"%CHOICE:~0,1%\"==\"R\" goto reject\n" +
-		"if /i \"%CHOICE%\"==\"E\" goto edit\n" +
-		"if /i \"%CHOICE:~0,1%\"==\"E\" goto edit\n" +
-		"echo Invalid choice. Aborting commit.\n" +
-		"exit /b 1\n\n" +
-		":accept\n" +
-		"git commit -m \"%COMMIT_MSG%\" --no-verify\n" +
-		"exit /b 1\n\n" +
-		":reject\n" +
-		"echo Commit aborted by user\n" +
-		"exit /b 1\n\n" +
-		":edit\n" +
-		"echo %COMMIT_MSG% > %TEMP%\\commit_msg.txt\n" +
-		"notepad %TEMP%\\commit_msg.txt\n" +
-		"set /p EDITED_MSG=<%TEMP%\\commit_msg.txt\n" +
-		"git commit -m \"%EDITED_MSG%\" --no-verify\n" +
-		"del %TEMP%\\commit_msg.txt\n" +
-		"exit /b 1\n"
+	exePath, err := os.Executable()
+	if err != nil {
+		exePath = "generate-commit"
+	} else {
+		// Ensure we have an absolute path
+		if absPath, err := filepath.Abs(exePath); err == nil {
+			exePath = absPath
+		}
+	}
+
+	return fmt.Sprintf(`@echo off
+REM Pre-commit hook for AI commit message generator (Windows)
+
+REM Check if there are staged changes
+git diff --staged --quiet >nul 2>&1
+if %%errorlevel%% equ 0 exit /b 0
+
+REM Generate commit message
+for /f "delims=" %%%%i in ('"%s" 2^>^&1') do set OUTPUT=%%%%i
+if errorlevel 1 (
+    echo Error generating commit message
+    exit /b 1
+)
+
+REM Extract commit message (basic extraction - may need refinement)
+set COMMIT_MSG=%%OUTPUT%%
+REM Remove "Generating commit message..." line if present
+set COMMIT_MSG=%%COMMIT_MSG:Generating commit message...=%%
+
+if "%%COMMIT_MSG%%"=="" (
+    echo No commit message generated
+    exit /b 1
+)
+
+REM Display the generated message
+echo.
+echo Generated commit message:
+echo ==========================
+echo %%COMMIT_MSG%%
+echo ==========================
+echo.
+echo Options:
+echo   [A]ccept and commit
+echo   [R]eject (abort commit)
+echo   [E]dit message
+echo.
+set /p CHOICE=Your choice (A/R/E): 
+
+if /i "%%CHOICE%%"=="A" goto accept
+if /i "%%CHOICE:~0,1%%"=="A" goto accept
+if /i "%%CHOICE%%"=="R" goto reject
+if /i "%%CHOICE:~0,1%%"=="R" goto reject
+if /i "%%CHOICE%%"=="E" goto edit
+if /i "%%CHOICE:~0,1%%"=="E" goto edit
+echo Invalid choice. Aborting commit.
+exit /b 1
+
+:accept
+git commit -m "%%COMMIT_MSG%%" --no-verify
+exit /b 1
+
+:reject
+echo Commit aborted by user
+exit /b 1
+
+:edit
+echo %%COMMIT_MSG%% > %%TEMP%%\commit_msg.txt
+notepad %%TEMP%%\commit_msg.txt
+set /p EDITED_MSG=<%%TEMP%%\commit_msg.txt
+git commit -m "%%EDITED_MSG%%" --no-verify
+del %%TEMP%%\commit_msg.txt
+exit /b 1
+`, exePath)
 }
