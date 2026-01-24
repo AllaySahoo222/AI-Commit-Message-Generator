@@ -33,13 +33,23 @@ func main() {
 }
 
 func runInit() {
+	force := false
+	if len(os.Args) > 2 {
+		for _, arg := range os.Args[2:] {
+			if arg == "--force" || arg == "-f" {
+				force = true
+				break
+			}
+		}
+	}
+
 	gitClient := git.NewClient()
 	rulesLoader := config.NewLoader()
 	configLoader := config.NewConfigLoader()
 
 	application := app.NewApp(gitClient, rulesLoader, configLoader, nil)
 
-	if err := application.Init(); err != nil {
+	if err := application.Init(force); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
