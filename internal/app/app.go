@@ -269,7 +269,6 @@ if ! git diff --staged --quiet; then
 fi
 `, exePath)
 }
-}
 
 // generateWindowsHook generates a batch pre-commit hook for Windows
 func (a *App) generateWindowsHook() string {
