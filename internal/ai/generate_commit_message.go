@@ -133,6 +133,7 @@ func (c *OllamaClient) buildPrompt(diff string, rules string) string {
 	sb.WriteString("If the diff represents a single logical change, generate a single-line git commit message following the Conventional Commits specification.\n\n")
 	sb.WriteString("Format for commit message:\n<type>(<scope>): <description>\n\n")
 	sb.WriteString("Allowed types: feat, fix, docs, style, refactor, test, chore.\n\n")
+	sb.WriteString("IMPORTANT: Use past tense for the description (e.g., 'added feature' not 'add feature', 'fixed bug' not 'fix bug').\n\n")
 	sb.WriteString("Do not output anything other than the message or the split suggestion.\n\n")
 
 	if rules != "" {
