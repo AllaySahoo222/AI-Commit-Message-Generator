@@ -221,7 +221,7 @@ if ! git diff --staged --quiet; then
         exit 1
     fi
     
-    # Display the generated message
+    # Display the generated message (with colors intact)
     echo ""
     echo "Generated commit message:"
     echo "=========================="
@@ -238,10 +238,13 @@ if ! git diff --staged --quiet; then
     exec < /dev/tty
     read -p "Your choice (A/R/E): " choice
     
+    # Strip ANSI color codes for the actual commit
+    CLEAN_MSG=$(echo "$COMMIT_MSG" | sed 's/\x1b\[[0-9;]*m//g')
+    
     case "$choice" in
         [Aa]*)
-            # Accept: commit with the generated message
-            git commit -m "$COMMIT_MSG" --no-verify
+            # Accept: commit with the generated message (colors stripped)
+            git commit -m "$CLEAN_MSG" --no-verify
             # Exit with error to prevent original commit from proceeding
             # (since we already committed)
             exit 1
@@ -252,8 +255,8 @@ if ! git diff --staged --quiet; then
             exit 1
             ;;
         [Ee]*)
-            # Edit: allow user to modify
-            echo "$COMMIT_MSG" > /tmp/commit_msg.txt
+            # Edit: allow user to modify (colors stripped)
+            echo "$CLEAN_MSG" > /tmp/commit_msg.txt
             ${EDITOR:-nano} /tmp/commit_msg.txt
             EDITED_MSG=$(cat /tmp/commit_msg.txt)
             git commit -m "$EDITED_MSG" --no-verify
