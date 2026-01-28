@@ -21,6 +21,7 @@ type Client interface {
 	GetStagedDiff() (string, error)
 	CommitWithMessage(message string) error
 	GetRepoRoot() (string, error)
+	DetectState() (*GitState, error)
 }
 
 // ClientImpl implements the Client interface using go-git
@@ -384,3 +385,14 @@ func (c *ClientImpl) GetRepoRoot() (string, error) {
 
 	return "", fmt.Errorf("failed to determine repository root: .git directory not found")
 }
+
+// DetectState detects the current git state (merge, rebase, cherry-pick, or normal)
+func (c *ClientImpl) DetectState() (*GitState, error) {
+	repoRoot, err := c.GetRepoRoot()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository root: %w", err)
+	}
+
+	return DetectGitState(repoRoot)
+}
+
