@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"ai-commit-message-generator/internal/git"
 )
 
 // Manual Mocks
@@ -14,6 +16,7 @@ type MockGit struct {
 	GetStagedDiffFunc     func() (string, error)
 	CommitWithMessageFunc func(message string) error
 	GetRepoRootFunc       func() (string, error)
+	DetectStateFunc       func() (*git.GitState, error)
 }
 
 func (m *MockGit) IsInsideRepo() (bool, error) {
@@ -42,6 +45,14 @@ func (m *MockGit) GetRepoRoot() (string, error) {
 	return "/tmp/test-repo", nil
 }
 
+func (m *MockGit) DetectState() (*git.GitState, error) {
+	if m.DetectStateFunc != nil {
+		return m.DetectStateFunc()
+	}
+	// Default: return normal state
+	return &git.GitState{Type: git.StateNormal}, nil
+}
+
 type MockConfig struct {
 	LoadRulesFunc func() (string, error)
 }
@@ -51,11 +62,11 @@ func (m *MockConfig) LoadRules() (string, error) {
 }
 
 type MockAI struct {
-	GenerateCommitMessageFunc func(diff string, rules string) (string, error)
+	GenerateCommitMessageFunc func(diff string, rules string, gitState *git.GitState) (string, error)
 }
 
-func (m *MockAI) GenerateCommitMessage(diff string, rules string) (string, error) {
-	return m.GenerateCommitMessageFunc(diff, rules)
+func (m *MockAI) GenerateCommitMessage(diff string, rules string, gitState *git.GitState) (string, error) {
+	return m.GenerateCommitMessageFunc(diff, rules, gitState)
 }
 
 func TestApp_Run(t *testing.T) {
@@ -77,7 +88,7 @@ func TestApp_Run(t *testing.T) {
 				LoadRulesFunc: func() (string, error) { return "some rules", nil },
 			},
 			mockAI: &MockAI{
-				GenerateCommitMessageFunc: func(diff, rules string) (string, error) {
+				GenerateCommitMessageFunc: func(diff, rules string, gitState *git.GitState) (string, error) {
 					if diff != "diff content" {
 						return "", errors.New("unexpected diff")
 					}
@@ -100,7 +111,7 @@ func TestApp_Run(t *testing.T) {
 				LoadRulesFunc: func() (string, error) { return "", nil },
 			},
 			mockAI: &MockAI{
-				GenerateCommitMessageFunc: func(diff, rules string) (string, error) {
+				GenerateCommitMessageFunc: func(diff, rules string, gitState *git.GitState) (string, error) {
 					if rules != "" {
 						return "", errors.New("expected empty rules")
 					}
@@ -152,7 +163,7 @@ func TestApp_Run(t *testing.T) {
 				LoadRulesFunc: func() (string, error) { return "", nil },
 			},
 			mockAI: &MockAI{
-				GenerateCommitMessageFunc: func(diff, rules string) (string, error) {
+				GenerateCommitMessageFunc: func(diff, rules string, gitState *git.GitState) (string, error) {
 					return "", errors.New("ai service down")
 				},
 			},

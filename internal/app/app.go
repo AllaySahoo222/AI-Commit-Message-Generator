@@ -56,7 +56,23 @@ func (a *App) Run() error {
 		fmt.Printf("Warning: failed to load rules: %v. Proceeding without rules.\n", err)
 	}
 
-	// 3. Smart Diff Reading
+	// 3. Detect Git State (merge, rebase, cherry-pick)
+	gitState, err := a.Git.DetectState()
+	if err != nil {
+		fmt.Printf("Warning: failed to detect git state: %v. Proceeding with normal state.\n", err)
+		gitState = &git.GitState{Type: git.StateNormal}
+	}
+
+	// Display state information if not normal
+	if gitState.Type != git.StateNormal {
+		fmt.Fprintf(os.Stderr, "\n\033[33m⚠ Git State Detected: %s\033[0m\n", gitState.Type)
+		if gitState.OriginalMessage != "" {
+			fmt.Fprintf(os.Stderr, "\033[33mOriginal message: %s\033[0m\n", gitState.OriginalMessage)
+		}
+		fmt.Fprintln(os.Stderr)
+	}
+
+	// 4. Smart Diff Reading
 	diff, err := a.Git.GetStagedDiff()
 	if err != nil {
 		return fmt.Errorf("failed to get diff: %w", err)
@@ -64,22 +80,27 @@ func (a *App) Run() error {
 
 	fmt.Println("Generating commit message...")
 
-	// 4. AI Integration
-	message, err := a.AI.GenerateCommitMessage(diff, rules)
+	// 5. AI Integration (with git state context)
+	message, err := a.AI.GenerateCommitMessage(diff, rules, gitState)
 	if err != nil {
 		return fmt.Errorf("failed to generate commit message: %w", err)
 	}
 
-	// 5. Output
-	// Check if the response suggests splitting (multi-line or specific keywords)
-	// Heuristic: If it has multiple lines, it's likely a split suggestion or discussion.
-	// Conventional commits are typically single line (subject).
-	if strings.Contains(message, "\n") {
+	// 6. Output
+	// Check if the response suggests splitting into multiple commits
+	// Look for explicit keywords that indicate the AI is suggesting a split
+	lowerMessage := strings.ToLower(message)
+	isSplitSuggestion := strings.Contains(lowerMessage, "split") ||
+		strings.Contains(lowerMessage, "separate commit") ||
+		strings.Contains(lowerMessage, "multiple commit") ||
+		strings.Contains(lowerMessage, "should be committed separately")
+	
+	if isSplitSuggestion {
 		// Output split suggestion in Yellow
 		fmt.Println("\n\033[33mAI Suggestion (Split Changes):\033[0m")
 		fmt.Println(message)
 	} else {
-		// Output commit message in Cyan
+		// Output commit message in Cyan (can be multi-line)
 		fmt.Println("\n\033[36m" + message + "\033[0m")
 	}
 
@@ -205,7 +226,7 @@ func (a *App) generateUnixHook() string {
 # Check if there are staged changes
 if ! git diff --staged --quiet; then
     # Generate commit message
-    COMMIT_MSG=$("%s" 2>&1)
+    COMMIT_MSG=$("%s")
     EXIT_CODE=$?
     
     if [ $EXIT_CODE -ne 0 ]; then
@@ -214,7 +235,7 @@ if ! git diff --staged --quiet; then
     fi
     
     # Extract just the message (skip "Generating commit message..." line)
-    COMMIT_MSG=$(echo "$COMMIT_MSG" | grep -v "Generating commit message" | sed 's/^[[:space:]]*//' | sed '/^$/d')
+    COMMIT_MSG=$(echo "$COMMIT_MSG" | grep -v "Generating commit message" | perl -pe 's/\e\[[0-9;]*m//g' | sed 's/^[[:space:]]*//' | sed '/^$/d')
     
     if [ -z "$COMMIT_MSG" ]; then
         echo "No commit message generated"
