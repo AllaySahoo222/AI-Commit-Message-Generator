@@ -103,7 +103,7 @@ func TestOllamaClient_GenerateCommitMessage(t *testing.T) {
 				},
 			}
 
-			msg, err := client.GenerateCommitMessage(tt.diff, tt.rules)
+			msg, err := client.GenerateCommitMessage(tt.diff, tt.rules, nil)
 
 			if tt.expectedErr != "" {
 				if err == nil {
